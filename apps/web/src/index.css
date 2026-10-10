@@ -443,3 +443,58 @@ textarea[aria-invalid='true'] {
   white-space: nowrap;
   border: 0;
 }
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.history__item {
+  border-top: 1px solid var(--colour-border);
+  padding-top: 12px;
+}
+
+.history__item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.history__line,
+.history__reason,
+.history__meta {
+  margin: 0 0 4px;
+}
+
+.history__reason {
+  font-style: italic;
+}
+
+.history__meta {
+  font-size: 0.8rem;
+  color: var(--colour-muted);
+}
+
+.triage {
+  display: grid;
+  gap: var(--gap);
+  margin: 12px 0;
+}
+
+.triage dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--colour-muted);
+}
+
+.triage dd {
+  margin: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}

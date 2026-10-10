@@ -79,6 +79,7 @@ describe('useTicketList', () => {
       ['customerId', { customerId: 2 }],
       ['assignedAgentId', { assignedAgentId: 4 }],
       ['unassignedOnly', { unassignedOnly: true }],
+      ['slaStatus', { slaStatus: 'AtRisk' }],
       ['sort', { sortBy: 'dueAtUtc', sortDirection: 'asc' }],
     ] as const)('requests immediately when %s changes', async (_name, patch) => {
       const { result } = renderHook(() => useTicketList());

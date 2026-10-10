@@ -73,6 +73,21 @@ npm test                      # dotnet test, then the web tests (Vitest)
 
 Both pass on a clean checkout and neither needs a database.
 
+## The defect (DEFECT-117)
+
+**Root cause:** the `useTicketList` effect only depended on `search`, `page` and `pageSize`.
+Changing a filter such as status or priority updated the state but never triggered a new API
+request.
+
+**Fix:** I restructured the hook so every filter change sends a request straight away. Only the
+search text is debounced (300 ms), so typing doesn't send a request per keystroke. I also removed
+the lint suppression that was hiding the missing-dependency warning.
+
+**Testing:** the DEFECT-117 tests assert the request that is sent after each filter change; 7 of
+them fail on the original code and pass with the fix. Debounce and reset are tested too.
+
+See [docs/defect-117.md](docs/defect-117.md) for the investigation and screenshots.
+
 ## Commands
 
 | Command | What it does |
@@ -107,3 +122,14 @@ and 40 tickets across every status, priority and SLA state.
 | Browser warns about the certificate | `dotnet dev-certs https --trust`, or use the web app, which proxies |
 | Web app shows "Unable to load tickets" | The API is not running, or `VITE_API_PROXY_TARGET` points at the wrong port |
 | SQL Server slow on Apple Silicon | Enable Rosetta in Docker Desktop → Settings → General |
+
+## AI usage
+
+I used Claude Code to:
+
+- help with document formatting and writing (this README and `docs/defect-117.md`);
+- explain parts of the project I was not familiar with, such as the .NET layout, and help when I got stuck;
+- draft the DEFECT-117 fix and its tests, which I then read, ran, and checked against the
+  original code before keeping.
+
+I reproduced the defect myself in the browser and took the screenshots.

@@ -87,10 +87,12 @@ Both pass on a clean checkout and neither needs a database.
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `sortBy`, `sortDirection`. Filters are applied in the database. |
+| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `slaStatus`, `sortBy`, `sortDirection`. Filters are applied in the database. |
 | `GET /api/tickets/{id}` | One ticket |
-| `POST /api/tickets` | Create a ticket |
+| `POST /api/tickets` | Create a ticket. It is triaged: priority, due date and owner are chosen, and a `triage` object says why. `201` even when no agent is eligible |
 | `PATCH /api/tickets/{id}/status` · `/assignment` | Change status / assignee |
+| `POST /api/tickets/{id}/escalate` | Raise the priority one level with a `reason` and `escalatedBy`. `400` bad input, `404` unknown ticket, `409` Critical, Resolved or Closed |
+| `GET /api/tickets/{id}/escalations` | The escalation history, newest first |
 | `GET /api/customers` · `/api/agents` · `/api/categories` | Reference data |
 
 Errors are `ProblemDetails`: `400` validation, `404` not found, `409` conflict or business rule.
@@ -147,6 +149,25 @@ database, so the filters really become SQL. With the original query put back, 12
 
 See [docs/filtering.md](docs/filtering.md) for the before/after and the tests.
 
+## Ticket escalation (Task 2)
+
+**What it does:** a new ticket is triaged on create: its priority, due date and owner come from
+the rules, and the response says why. A ticket can be escalated one level with a reason, and
+each escalation is kept in a history. SLA status is derived, never stored, and filterable.
+
+**Where:** small domain classes (`SlaPolicy`, `PriorityResolver`, `AgentSelector`,
+`Ticket.Escalate`) that `TicketTriage` combines, so create and escalate share them. The windows
+and thresholds are in the `Sla` section of `appsettings.json`.
+
+**Testing:** boundary tests with a fixed clock, mocked handlers, SQLite for the history and the
+SLA filter, and Vitest for the screens. The filter was also checked on the real SQL Server.
+
+**Check it by hand:** raise a Security ticket for a Premium customer: it comes back Critical,
+with an agent and a due date two hours away. Escalate any ticket below Critical and the history
+appears under it.
+
+See [docs/escalation.md](docs/escalation.md) for the rules, examples and screenshots.
+
 ## Design decisions
 
 **The defect**
@@ -169,6 +190,33 @@ See [docs/filtering.md](docs/filtering.md) for the before/after and the tests.
 - **Chosen:** tests against in-memory SQLite, because mocks and EF's in-memory provider don't
   prove that the filters become real SQL.
 
+**Escalation and triage**
+
+- **Chosen:** the rules sit in small domain classes (`SlaPolicy`, `PriorityResolver`,
+  `AgentSelector`, `Ticket.Escalate`) that create and escalate both use through `TicketTriage`.
+  **Rejected:** writing them in the handlers, because they would be written twice.
+- **Chosen:** the at-risk window comes from the config for the ticket's priority and customer
+  tier. **Rejected:** due date minus created date, which is wrong after an escalation, and a
+  stored window column, which needs a migration and a seeder change for something the config
+  already answers.
+- **Chosen:** history foreign keys use `Restrict`. **Rejected:** cascade, because an audit trail
+  shouldn't disappear by accident.
+- **Chosen:** the ticket being escalated is not counted against its own agent's limit.
+  **Rejected:** counting it, because an agent at their limit would lose every ticket they hold.
+- **Chosen:** equal agents are separated by the lowest id. **Rejected:** random or alphabetical,
+  which are not repeatable or favour the same person.
+- **Chosen:** the SLA filter compares dates with values worked out in C#. **Rejected:** date
+  arithmetic in SQL, which differs between SQL Server and SQLite, and filtering in memory.
+
+**Patterns I used**
+
+- **Factory:** `SlaPolicyFactory` builds the policy once from configuration and fails at startup
+  if a value is missing.
+- **Domain service:** `AgentSelector` and `TicketTriage` hold rules that involve several
+  aggregates and don't belong on one entity.
+- **Composable filter steps:** `ApplyFilters` and `SlaStatusFilter` add one condition at a time,
+  so a new filter is one more step.
+
 ## AI usage
 
 I used Claude Code throughout this assignment. I'm new to .NET, so I used it to explain the
@@ -185,5 +233,15 @@ I also ran the app and the tests myself to check what it produced.
   would need full-text search.
 - Search is case-insensitive on SQL Server because of its collation. The tests run on SQLite,
   which is case-sensitive, so they use exact case.
-- The filter tests run on SQLite, not SQL Server itself, and the frontend tests check the
-  arguments passed to the API function, not the final URL.
+- The filter tests run on SQLite, not SQL Server itself. The SLA filter was also checked against
+  the real SQL Server by hand.
+- Open-ticket counts are read and then used, so two tickets raised at the same moment could both
+  go to an agent who has room for only one.
+- "Escalated by" is a text field until Task 3 takes it from the signed-in user.
+- Changing the `Sla` section or a customer's tier changes the status of tickets that already
+  exist, because the at-risk window is worked out from them.
+- Ticket references are built from the highest ticket id + 1. SQL Server can skip about 1,000
+  identity values after a restart, so references can jump (TCK-0041, then TCK-1003). If two
+  tickets are created at the same moment they can compute the same reference, and the unique
+  index makes one of them fail. A database sequence would fix both. This existed before my
+  changes and is outside the tasks.

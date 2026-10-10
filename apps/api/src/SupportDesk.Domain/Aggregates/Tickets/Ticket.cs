@@ -59,7 +59,8 @@ public sealed class Ticket : AggregateRoot
         int customerId,
         int categoryId,
         TicketPriority priority,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        DateTime? dueAtUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
@@ -75,8 +76,73 @@ public sealed class Ticket : AggregateRoot
             Priority = priority,
             Status = TicketStatus.New,
             CreatedAtUtc = nowUtc,
-            UpdatedAtUtc = nowUtc
+            UpdatedAtUtc = nowUtc,
+            DueAtUtc = dueAtUtc
         };
+    }
+
+    /// <summary>
+    /// Raises the ticket's priority by one level, with its new due date and owner, and returns
+    /// the history entry that records the change. The caller works out the new due date and
+    /// owner, because that needs the SLA policy and the agents.
+    /// </summary>
+    /// <exception cref="BusinessRuleViolationException">
+    /// The ticket is Resolved or Closed, or is already Critical.
+    /// </exception>
+    public TicketEscalation Escalate(
+        string reason,
+        string escalatedBy,
+        DateTime newDueAtUtc,
+        int? newAgentId,
+        DateTime nowUtc)
+    {
+        if (!IsOpen)
+        {
+            throw new BusinessRuleViolationException(
+                $"Ticket {Reference} is {Status} and cannot be escalated.");
+        }
+
+        if (Priority == TicketPriority.Critical)
+        {
+            throw new BusinessRuleViolationException(
+                $"Ticket {Reference} is already Critical and cannot be escalated further.");
+        }
+
+        reason = (reason ?? string.Empty).Trim();
+        escalatedBy = (escalatedBy ?? string.Empty).Trim();
+
+        if (reason.Length is < TicketEscalation.MinReasonLength or > TicketEscalation.MaxReasonLength)
+        {
+            throw new ArgumentException(
+                $"The reason must be {TicketEscalation.MinReasonLength} to {TicketEscalation.MaxReasonLength} characters.",
+                nameof(reason));
+        }
+
+        if (escalatedBy.Length is 0 or > TicketEscalation.MaxEscalatedByLength)
+        {
+            throw new ArgumentException(
+                $"Who escalated the ticket is required, up to {TicketEscalation.MaxEscalatedByLength} characters.",
+                nameof(escalatedBy));
+        }
+
+        var entry = new TicketEscalation(
+            Id,
+            fromPriority: Priority,
+            toPriority: Priority + 1,
+            fromAgentId: AssignedAgentId,
+            toAgentId: newAgentId,
+            fromDueAtUtc: DueAtUtc,
+            toDueAtUtc: newDueAtUtc,
+            reason,
+            escalatedBy,
+            nowUtc);
+
+        Priority = entry.ToPriority;
+        DueAtUtc = newDueAtUtc;
+        AssignedAgentId = newAgentId;
+        UpdatedAtUtc = nowUtc;
+
+        return entry;
     }
 
     /// <summary>

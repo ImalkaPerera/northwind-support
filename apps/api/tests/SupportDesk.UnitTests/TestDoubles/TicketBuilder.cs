@@ -14,6 +14,9 @@ public sealed class TicketBuilder
     private TicketStatus _status = TicketStatus.New;
     private int? _assignedAgentId;
     private DateTime? _resolvedAtUtc;
+    private DateTime? _dueAtUtc;
+    private int _customerId = 1;
+    private int _categoryId = 1;
 
     public TicketBuilder WithReference(string reference)
     {
@@ -46,16 +49,35 @@ public sealed class TicketBuilder
         return this;
     }
 
+    public TicketBuilder WithCustomer(int customerId)
+    {
+        _customerId = customerId;
+        return this;
+    }
+
+    public TicketBuilder WithCategory(int categoryId)
+    {
+        _categoryId = categoryId;
+        return this;
+    }
+
+    public TicketBuilder DueAt(DateTime? dueAtUtc)
+    {
+        _dueAtUtc = dueAtUtc;
+        return this;
+    }
+
     public Ticket Build()
     {
         var ticket = Ticket.Raise(
             _reference,
             "Something is not working",
             "A description long enough to be realistic.",
-            customerId: 1,
-            categoryId: 1,
+            _customerId,
+            _categoryId,
             _priority,
-            FixedClock.DefaultNow);
+            FixedClock.DefaultNow,
+            _dueAtUtc);
 
         if (_assignedAgentId is not null)
         {

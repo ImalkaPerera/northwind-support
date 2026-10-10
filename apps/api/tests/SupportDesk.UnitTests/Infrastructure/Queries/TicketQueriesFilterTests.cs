@@ -226,7 +226,7 @@ public sealed class TicketQueriesFilterTests : IDisposable
     {
         _db.SaveChanges();
 
-        return new TicketQueries(_db, new FixedClock()).GetPagedAsync(query.Normalized(), CancellationToken.None);
+        return new TicketQueries(_db, new FixedClock(), TestSlaPolicy.Default()).GetPagedAsync(query.Normalized(), CancellationToken.None);
     }
 
     private void SeedReferenceData()

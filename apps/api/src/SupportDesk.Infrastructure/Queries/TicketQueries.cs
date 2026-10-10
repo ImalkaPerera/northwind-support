@@ -14,7 +14,7 @@ namespace SupportDesk.Infrastructure.Queries;
 /// Ticket reads. Projected in the database and never tracked. Aggregates hold only each
 /// other's ids, so the customer, category and agent labels are joined in here, on the read side.
 /// </summary>
-public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQueries
+public sealed class TicketQueries(SupportDbContext db, IClock clock, SlaPolicy slaPolicy) : ITicketQueries
 {
     /// <remarks>
     /// Filters, then counts, then sorts and pages, all in the database. The count therefore
@@ -45,7 +45,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
                 UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
                 DueAtUtc = x.Ticket.DueAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+                SlaStatus = SlaEvaluator.Evaluate(
+                    x.Ticket.DueAtUtc,
+                    x.Ticket.ResolvedAtUtc,
+                    now,
+                    slaPolicy.AtRiskSpanFor(x.Ticket.Priority, x.Customer.Tier))
             })
             .ToListAsync(ct);
 
@@ -102,7 +106,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
                 UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
                 DueAtUtc = x.Ticket.DueAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+                SlaStatus = SlaEvaluator.Evaluate(
+                    x.Ticket.DueAtUtc,
+                    x.Ticket.ResolvedAtUtc,
+                    now,
+                    slaPolicy.AtRiskSpanFor(x.Ticket.Priority, x.Customer.Tier))
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -129,7 +137,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
                 UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
                 DueAtUtc = x.Ticket.DueAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+                SlaStatus = SlaEvaluator.Evaluate(
+                    x.Ticket.DueAtUtc,
+                    x.Ticket.ResolvedAtUtc,
+                    now,
+                    slaPolicy.AtRiskSpanFor(x.Ticket.Priority, x.Customer.Tier))
             })
             .ToListAsync(ct);
     }
@@ -148,7 +160,7 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
     /// Narrows the list to what the query asks for. Each supplied filter is one more
     /// <c>Where</c>, so they combine with AND, and adding a filter means adding one more step.
     /// </summary>
-    private static IQueryable<TicketWithLabels> ApplyFilters(IQueryable<TicketWithLabels> source, TicketQuery query)
+    private IQueryable<TicketWithLabels> ApplyFilters(IQueryable<TicketWithLabels> source, TicketQuery query)
     {
         if (query.Status is { } status)
         {
@@ -178,6 +190,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
         if (query.UnassignedOnly)
         {
             source = source.Where(x => x.Ticket.AssignedAgentId == null);
+        }
+
+        if (query.SlaStatus is { } slaStatus)
+        {
+            source = source.Where(SlaStatusFilter.For(slaStatus, clock.UtcNow, slaPolicy));
         }
 
         var search = query.Search?.Trim();
@@ -218,16 +235,5 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
 
         // Keeps paging stable when the sort column has duplicates.
         return sorted.ThenByDescending(x => x.Ticket.Id);
-    }
-
-    private sealed class TicketWithLabels
-    {
-        public required Ticket Ticket { get; init; }
-
-        public required Customer Customer { get; init; }
-
-        public required Category Category { get; init; }
-
-        public Agent? Agent { get; init; }
     }
 }

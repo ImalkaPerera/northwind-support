@@ -32,6 +32,9 @@ public sealed record TicketQuery
 
     public bool UnassignedOnly { get; init; }
 
+    /// <summary>Derived from the due date and "now"; filtered in the database, never stored.</summary>
+    public SlaStatus? SlaStatus { get; init; }
+
     /// <summary>createdAtUtc | updatedAtUtc | dueAtUtc | priority | status.</summary>
     public string SortBy { get; init; } = "createdAtUtc";
 

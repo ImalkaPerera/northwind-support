@@ -180,7 +180,7 @@ public sealed class TicketEscalationPersistenceTests : IDisposable
         }
 
         using var readBack = NewContext();
-        var history = await new TicketQueries(readBack, new FixedClock())
+        var history = await new TicketQueries(readBack, new FixedClock(), TestSlaPolicy.Default())
             .GetEscalationsAsync(_ticketId, CancellationToken.None);
 
         Assert.NotNull(history);
@@ -196,7 +196,7 @@ public sealed class TicketEscalationPersistenceTests : IDisposable
     {
         using var db = NewContext();
 
-        var history = await new TicketQueries(db, new FixedClock())
+        var history = await new TicketQueries(db, new FixedClock(), TestSlaPolicy.Default())
             .GetEscalationsAsync(_ticketId, CancellationToken.None);
 
         Assert.NotNull(history);
@@ -208,7 +208,7 @@ public sealed class TicketEscalationPersistenceTests : IDisposable
     {
         using var db = NewContext();
 
-        var history = await new TicketQueries(db, new FixedClock())
+        var history = await new TicketQueries(db, new FixedClock(), TestSlaPolicy.Default())
             .GetEscalationsAsync(9999, CancellationToken.None);
 
         Assert.Null(history);

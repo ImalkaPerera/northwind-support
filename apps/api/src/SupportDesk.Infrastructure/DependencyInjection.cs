@@ -31,6 +31,9 @@ public static class DependencyInjection
 
         services.AddSingleton<IClock, SystemClock>();
 
+        // Read once at startup, so a missing or invalid Sla section fails fast.
+        services.AddSingleton(SlaPolicyFactory.FromConfiguration(configuration));
+
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IAgentRepository, AgentRepository>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();

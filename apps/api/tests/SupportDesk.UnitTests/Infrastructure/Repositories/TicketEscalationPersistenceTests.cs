@@ -5,6 +5,7 @@ using SupportDesk.Domain.Aggregates.Categories;
 using SupportDesk.Domain.Aggregates.Customers;
 using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Infrastructure.Data;
+using SupportDesk.Infrastructure.Queries;
 using SupportDesk.Infrastructure.Repositories;
 using SupportDesk.UnitTests.TestDoubles;
 
@@ -158,6 +159,59 @@ public sealed class TicketEscalationPersistenceTests : IDisposable
             .ToListAsync();
 
         Assert.Equal(["Second reason here", "First reason here"], history.Select(e => e.Reason));
+    }
+
+    [Fact]
+    public async Task TheHistoryQuery_ReturnsNewestFirstWithAgentNames()
+    {
+        using (var db = NewContext())
+        {
+            var ticket = await db.Set<Ticket>().SingleAsync();
+            var repository = new TicketRepository(db);
+
+            await repository.AddEscalationAsync(
+                ticket.Escalate("First reason here", "alex", Now.AddHours(30), _alexId, Now.AddHours(1)),
+                CancellationToken.None);
+            await repository.AddEscalationAsync(
+                ticket.Escalate("Second reason here", "alex", Now.AddHours(10), _saraId, Now.AddHours(2)),
+                CancellationToken.None);
+
+            await db.SaveChangesAsync();
+        }
+
+        using var readBack = NewContext();
+        var history = await new TicketQueries(readBack, new FixedClock())
+            .GetEscalationsAsync(_ticketId, CancellationToken.None);
+
+        Assert.NotNull(history);
+        Assert.Equal(["Second reason here", "First reason here"], history.Select(e => e.Reason));
+        Assert.Equal("Alex Turner", history[0].FromAgent?.FullName);
+        Assert.Equal("Sara Lindqvist", history[0].ToAgent?.FullName);
+        Assert.Equal(TicketPriority.Medium, history[0].FromPriority);
+        Assert.Equal(TicketPriority.High, history[0].ToPriority);
+    }
+
+    [Fact]
+    public async Task TheHistoryQuery_ForATicketWithNoHistory_IsEmptyNotMissing()
+    {
+        using var db = NewContext();
+
+        var history = await new TicketQueries(db, new FixedClock())
+            .GetEscalationsAsync(_ticketId, CancellationToken.None);
+
+        Assert.NotNull(history);
+        Assert.Empty(history);
+    }
+
+    [Fact]
+    public async Task TheHistoryQuery_ForAnUnknownTicket_IsNull()
+    {
+        using var db = NewContext();
+
+        var history = await new TicketQueries(db, new FixedClock())
+            .GetEscalationsAsync(9999, CancellationToken.None);
+
+        Assert.Null(history);
     }
 
     private SupportDbContext NewContext() => new(_options);

@@ -82,6 +82,37 @@ public sealed class Ticket : AggregateRoot
     }
 
     /// <summary>
+    /// Throws unless the ticket may be escalated. Callers that need the next priority or due
+    /// date first use this, so a rejection comes before any other work.
+    /// </summary>
+    /// <exception cref="BusinessRuleViolationException">
+    /// The ticket is Resolved or Closed, or is already Critical.
+    /// </exception>
+    public void EnsureCanBeEscalated()
+    {
+        if (!IsOpen)
+        {
+            throw new BusinessRuleViolationException(
+                $"Ticket {Reference} is {Status} and cannot be escalated.");
+        }
+
+        if (Priority == TicketPriority.Critical)
+        {
+            throw new BusinessRuleViolationException(
+                $"Ticket {Reference} is already Critical and cannot be escalated further.");
+        }
+    }
+
+    /// <summary>The priority this ticket would have after an escalation.</summary>
+    /// <exception cref="BusinessRuleViolationException">The ticket cannot be escalated.</exception>
+    public TicketPriority PriorityAfterEscalation()
+    {
+        EnsureCanBeEscalated();
+
+        return Priority + 1;
+    }
+
+    /// <summary>
     /// Raises the ticket's priority by one level, with its new due date and owner, and returns
     /// the history entry that records the change. The caller works out the new due date and
     /// owner, because that needs the SLA policy and the agents.
@@ -96,17 +127,7 @@ public sealed class Ticket : AggregateRoot
         int? newAgentId,
         DateTime nowUtc)
     {
-        if (!IsOpen)
-        {
-            throw new BusinessRuleViolationException(
-                $"Ticket {Reference} is {Status} and cannot be escalated.");
-        }
-
-        if (Priority == TicketPriority.Critical)
-        {
-            throw new BusinessRuleViolationException(
-                $"Ticket {Reference} is already Critical and cannot be escalated further.");
-        }
+        EnsureCanBeEscalated();
 
         reason = (reason ?? string.Empty).Trim();
         escalatedBy = (escalatedBy ?? string.Empty).Trim();
@@ -128,7 +149,7 @@ public sealed class Ticket : AggregateRoot
         var entry = new TicketEscalation(
             Id,
             fromPriority: Priority,
-            toPriority: Priority + 1,
+            toPriority: PriorityAfterEscalation(),
             fromAgentId: AssignedAgentId,
             toAgentId: newAgentId,
             fromDueAtUtc: DueAtUtc,

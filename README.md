@@ -73,21 +73,6 @@ npm test                      # dotnet test, then the web tests (Vitest)
 
 Both pass on a clean checkout and neither needs a database.
 
-## The defect (DEFECT-117)
-
-**Root cause:** the `useTicketList` effect only depended on `search`, `page` and `pageSize`.
-Changing a filter such as status or priority updated the state but never triggered a new API
-request.
-
-**Fix:** I restructured the hook so every filter change sends a request straight away. Only the
-search text is debounced (300 ms), so typing doesn't send a request per keystroke. I also removed
-the lint suppression that was hiding the missing-dependency warning.
-
-**Testing:** the DEFECT-117 tests assert the request that is sent after each filter change; 7 of
-them fail on the original code and pass with the fix. Debounce and reset are tested too.
-
-See [docs/defect-117.md](docs/defect-117.md) for the investigation and screenshots.
-
 ## Commands
 
 | Command | What it does |
@@ -102,7 +87,7 @@ See [docs/defect-117.md](docs/defect-117.md) for the investigation and screensho
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `sortBy`, `sortDirection`. **Filters are accepted but not applied yet** (Task 1). |
+| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `sortBy`, `sortDirection`. Filters are applied in the database. |
 | `GET /api/tickets/{id}` | One ticket |
 | `POST /api/tickets` | Create a ticket |
 | `PATCH /api/tickets/{id}/status` · `/assignment` | Change status / assignee |
@@ -123,13 +108,82 @@ and 40 tickets across every status, priority and SLA state.
 | Web app shows "Unable to load tickets" | The API is not running, or `VITE_API_PROXY_TARGET` points at the wrong port |
 | SQL Server slow on Apple Silicon | Enable Rosetta in Docker Desktop → Settings → General |
 
+## The defect (DEFECT-117)
+
+**Root cause:** the `useTicketList` effect only depended on `search`, `page` and `pageSize`.
+Changing a filter such as status or priority updated the state but never triggered a new API
+request.
+
+**Fix:** I restructured the hook so every filter change sends a request straight away. Only the
+search text is debounced (300 ms), so typing doesn't send a request per keystroke. I also removed
+the lint suppression that was hiding the missing-dependency warning.
+
+**Testing:** the DEFECT-117 tests assert the request that is sent after each filter change; 7 of
+them fail on the original code and pass with the fix. Debounce and reset are tested too.
+
+**Check it by hand:** change Status in the web app and watch a `GET /api/tickets?status=...`
+request appear immediately in the Network tab.
+
+See [docs/defect-117.md](docs/defect-117.md) for the investigation and screenshots.
+
+## Filtering
+
+**Where:** `TicketQueries.ApplyFilters` (Infrastructure). Each filter that is sent adds one
+`Where` before the count and paging, so the database does all the work and `totalCount` and the
+pager match the filtered list.
+
+**Rules:**
+
+- `status`, `priority`, `categoryId`, `customerId` and `assignedAgentId` are exact matches.
+- `unassignedOnly=true` keeps only tickets with no agent.
+- `search` is trimmed, and ignored if blank. It matches the title, the reference or the
+  customer name.
+- All filters must match (AND).
+
+**Testing:** the tests in `TicketQueriesFilterTests` run the query against an in-memory SQLite
+database, so the filters really become SQL. With the original query put back, 12 of the 14 fail.
+
+**Adding a filter:** add the field to `TicketQuery` and one more `if` in `ApplyFilters`.
+
+See [docs/filtering.md](docs/filtering.md) for the before/after and the tests.
+
+## Design decisions
+
+**The defect**
+
+- **Chosen:** keep the filters that requests are made with separate from the text in the search
+  box. Dropdowns apply straight away; the search text is applied 300 ms after typing stops.
+- **Rejected:** adding every filter to the existing dependency array. The debounce wraps the
+  whole effect, so dropdowns would wait 300 ms too, and the task asks for an immediate request.
+- **Rejected:** a remount key or a forced reload. The task says that hides the problem instead of
+  fixing the cause.
+
+**Filtering**
+
+- **Chosen:** one `ApplyFilters` method with a `Where` per filter that was sent, so the next
+  filter is one more `if`.
+- **Rejected:** filtering in C# after loading. It breaks the count and paging, and the task
+  forbids it.
+- **Rejected:** a specification class or a dynamic-LINQ library, which is more than seven filters
+  need.
+- **Chosen:** tests against in-memory SQLite, because mocks and EF's in-memory provider don't
+  prove that the filters become real SQL.
+
 ## AI usage
 
-I used Claude Code to:
+I used Claude Code throughout this assignment. I'm new to .NET, so I used it to explain the
+project and unfamiliar code, to help when I got stuck, to draft code and tests, and to help with
+the wording and formatting of the documents.
 
-- help with document formatting and writing (this README and `docs/defect-117.md`);
-- explain parts of the project I was not familiar with, such as the .NET layout, and help when I got stuck;
-- draft the DEFECT-117 fix and its tests, which I then read, ran, and checked against the
-  original code before keeping.
+I also ran the app and the tests myself to check what it produced.
 
-I reproduced the defect myself in the browser and took the screenshots.
+## Known limitations
+
+- If a slow request finishes after a newer one, it can overwrite the newer result. I left this out
+  to keep the defect fix focused on its cause.
+- Search uses `LIKE '%text%'`, which can't use an index. That's fine for this data; a large table
+  would need full-text search.
+- Search is case-insensitive on SQL Server because of its collation. The tests run on SQLite,
+  which is case-sensitive, so they use exact case.
+- The filter tests run on SQLite, not SQL Server itself, and the frontend tests check the
+  arguments passed to the API function, not the final URL.

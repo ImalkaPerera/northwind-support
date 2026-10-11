@@ -17,7 +17,7 @@ Full requirements are in **[`ASSIGNMENT_CANDIDATE.md`](ASSIGNMENT_CANDIDATE.md)*
 | 1 | **Fix a defect, add server-side filtering** | Root cause fixed with a regression test; every list filter applied in the database with a correct count | ~2.5 h |
 | 2 | **Ticket escalation & assignment** | Automatic triage on create, escalation with history, SLA status, UI for all of it | ~7 h |
 | 3 | **Login and authentication** | Agents sign in; API rejects unauthenticated calls; login UI | ~4 h |
-| 4 | **Dockerise the API** *(optional)* | `docker compose up` gives a migrated, seeded API with no baked-in secret | ~1.5 h |
+| 4 | **Dockerise the API** | `docker compose up` gives a migrated, seeded API with no baked-in secret | ~1.5 h |
 
 ### Guidance
 
@@ -166,7 +166,33 @@ SLA filter, and Vitest for the screens. The filter was also checked on the real 
 with an agent and a due date two hours away. Escalate any ticket below Critical and the history
 appears under it.
 
+**Who escalated:** it comes from the signed-in agent's token, not from the request or the form.
+
 See [docs/escalation.md](docs/escalation.md) for the rules, examples and screenshots.
+
+## Authentication (Task 3)
+
+**What it does:** agents sign in with email and password and get a signed token. Every endpoint
+except `POST /api/auth/login` and Swagger needs it, enforced by one fallback authorization policy.
+Passwords are stored as salted hashes (ASP.NET Identity `PasswordHasher`), and a wrong email, a
+wrong password and an inactive agent all give the same 401. `escalatedBy` comes from the token.
+
+**Token:** it lasts **60 minutes** (`Jwt:LifetimeMinutes`), and the signing key comes from
+configuration (`Jwt__SigningKey`, see `.env.example`). The web app keeps it in **sessionStorage**:
+it is cleared when the tab closes and isn't shared between tabs, but any script on the page can
+read it, so an XSS bug would expose it.
+
+See [docs/authentication.md](docs/authentication.md) for the decisions and screenshots.
+
+## Development login
+
+Local development only. Every seeded agent has the same password, hashed when the data is seeded:
+
+- Email: `alex.turner@northwind-support.example`
+- Password: `LocalDev-Password-1`
+
+Other agents use the same password with their own email, for example
+`sara.lindqvist@northwind-support.example`. Yuki Tanaka is inactive and cannot sign in.
 
 ## Design decisions
 
@@ -219,11 +245,12 @@ See [docs/escalation.md](docs/escalation.md) for the rules, examples and screens
 
 ## AI usage
 
-I used Claude Code throughout this assignment. I'm new to .NET, so I used it to explain the
-project and unfamiliar code, to help when I got stuck, to draft code and tests, and to help with
-the wording and formatting of the documents.
+I used Claude Code as a pair programmer to understand the codebase, explore solutions, and draft code, tests, and documentation. I worked in small steps, reviewed proposed changes, and verified behaviour before committing.
 
-I also ran the app and the tests myself to check what it produced.
+- **Accepted:** The `ApplyFilters` design and the small rule classes behind `TicketTriage`.
+- **Changed:** I kept the `FromAgentId` and `ToAgentId` indexes after reviewing their role in foreign-key checks.
+- **Bugs:** An early login implementation used a static hash field, causing order-dependent tests. I removed the shared state after tests exposed the issue. AI also helped identify an ESLint suppression hiding a warning related to DEFECT-117.
+- **Verification:** I ran 201 backend tests and 64 web tests, added regression tests, checked the SLA filter against SQL Server, and manually tested the main flows. Screenshots are in `docs/`.
 
 ## Known limitations
 
@@ -237,7 +264,11 @@ I also ran the app and the tests myself to check what it produced.
   the real SQL Server by hand.
 - Open-ticket counts are read and then used, so two tickets raised at the same moment could both
   go to an agent who has room for only one.
-- "Escalated by" is a text field until Task 3 takes it from the signed-in user.
+- No refresh tokens, and no token revocation: a signed token works until it expires, even if the
+  agent is deactivated meanwhile.
+- No lockout or rate limiting on sign-in.
+- Not built, as the assignment says: registration, password reset, email verification, OAuth/SSO,
+  MFA, roles and HTTPS certificate work.
 - Changing the `Sla` section or a customer's tier changes the status of tickets that already
   exist, because the at-risk window is worked out from them.
 - Ticket references are built from the highest ticket id + 1. SQL Server can skip about 1,000

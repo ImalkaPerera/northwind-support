@@ -74,13 +74,15 @@ still 201, with the ticket unassigned and a reason such as "Left unassigned: …
 
 ## Escalation
 
-`POST /api/tickets/{id}/escalate` takes a reason and who is escalating. A reason under 5 or over
-500 characters after trimming, or no name, is a 400. An unknown ticket is a 404. A Critical,
+`POST /api/tickets/{id}/escalate` takes a reason, and who escalated is the signed-in agent's
+token. A reason under 5 or over 500 characters after trimming is a 400. An unknown ticket is a 404. A Critical,
 Resolved or Closed ticket is a 409, and the message says which.
 
 The form checks the same limits first, so a bad reason never reaches the API. I tried "abc":
 
 ![Reason abc blocked in the form](images/escalation-validation.png)
+
+This screenshot was taken before Task 3, so it still shows the old "Escalated by" field.
 
 An accepted escalation updates the ticket on the page and adds a row to the history, which is
 the next section. The ticket and the history row are saved together in one save.
@@ -91,11 +93,13 @@ Once a ticket is Critical, or if it is Resolved or Closed, the form is replaced 
 
 ## History
 
-To see it work I raised an Invoice question for Northwind Traders in General, priority Low, and
-escalated it with the reason "Customer called twice, need a faster answer". It went to Medium,
-and because Northwind Traders is a standard customer the due date moved from 13 Oct to 24 hours
-from the escalation. Sara Lindqvist kept the ticket, and the history shows what changed, the
-reason, who did it and when.
+To see it work I escalated a Low ticket for Fabrikam Inc with the reason "Customer called twice,
+needs a faster answer". It went to Medium and the due date moved from 14 Oct to 12 Oct, which is
+24 hours from the escalation: the Medium window for a standard customer like Fabrikam. Ben Osei
+kept the ticket, and the history shows what changed, the reason, who did it and when.
+
+This screenshot was taken after Task 3: the form says "Recorded as Alex Turner", and the history
+shows Alex Turner because the name came from the signed-in agent's token.
 
 ![Escalation history](images/escalation-history.png)
 
@@ -140,6 +144,5 @@ changes.
 
 - Open-ticket counts are read and then used, so two tickets raised at the same moment could both
   go to an agent who has room for only one.
-- "Escalated by" is a text field until Task 3 takes it from the signed-in user.
 - Changing the `Sla` section or a customer's tier changes the status of tickets that already
   exist.

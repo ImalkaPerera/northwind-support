@@ -9,6 +9,10 @@
 .env.*
 !.env.example
 
+# Local settings with the development SQL password and signing key. Config must arrive as
+# environment variables at run time, so this file is not allowed into the image.
+**/appsettings.Development.json
+
 # The web app is not part of the API image.
 apps/web/
 

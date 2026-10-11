@@ -40,7 +40,8 @@ services:
       # A local fixture, like the SQL password. Set a real random value anywhere that is not a laptop.
       Jwt__SigningKey: "${JWT_SIGNING_KEY:-local-dev-only-signing-key-change-me-0123456789}"
     ports:
-      - "5080:8080"
+      # 127.0.0.1 so only this machine can reach it, not the rest of the network.
+      - "127.0.0.1:5080:8080"
 
 volumes:
   supportdesk-sql:

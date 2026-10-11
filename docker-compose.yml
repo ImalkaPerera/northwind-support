@@ -1,5 +1,5 @@
-# SQL Server for local development only. The password below is a throwaway local
-# placeholder - never commit a real credential.
+# SQL Server and the API for local development only. The passwords and keys below are throwaway
+# local placeholders - never commit a real credential.
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -22,6 +22,25 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: supportdesk-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      # Development, so the API migrates and seeds an empty database and serves Swagger.
+      # Anything else skips both: see "Docker" in the README.
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      # "sqlserver" is the service name above; Docker's network resolves it.
+      ConnectionStrings__Default: "Server=sqlserver,1433;Database=SupportDesk;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Local_Dev_Password1};TrustServerCertificate=True;Encrypt=False"
+      # A local fixture, like the SQL password. Set a real random value anywhere that is not a laptop.
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-local-dev-only-signing-key-change-me-0123456789}"
+    ports:
+      - "5080:8080"
 
 volumes:
   supportdesk-sql:

@@ -1,0 +1,19 @@
+# Keeps the build context small and keeps local files out of the image.
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+.github/
+.vscode/
+.env
+.env.*
+!.env.example
+
+# The web app is not part of the API image.
+apps/web/
+
+# Tests, docs and screenshots are not needed to build the API.
+apps/api/tests/
+docs/
+*.md
+*.pdf

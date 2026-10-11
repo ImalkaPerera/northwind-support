@@ -8,6 +8,7 @@ using SupportDesk.Application.Abstractions;
 using SupportDesk.Infrastructure;
 using SupportDesk.Presentation.Extensions;
 using SupportDesk.Presentation.Filters;
+using SupportDesk.Presentation.Health;
 using SupportDesk.Presentation.Middleware;
 using SupportDesk.Presentation.Security;
 
@@ -50,6 +51,8 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 // Sign-in. The key comes from configuration or the environment, never from code, and a missing or
 // weak key stops the application here.
@@ -105,6 +108,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Open on purpose: Docker and load balancers call it with no token. It is the one endpoint, apart
+// from login, that opts out of the fallback policy, and it is declared here so it can be seen.
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
 

@@ -40,16 +40,14 @@ describe('ticketsApi', () => {
   it('posts an escalation to the ticket', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await ticketsApi.escalateTicket(12, { reason: 'Customer is losing money', escalatedBy: 'Alex' });
+    await ticketsApi.escalateTicket(12, { reason: 'Customer is losing money' });
 
     const { url, init } = lastRequest();
 
     expect(url).toMatch(/\/tickets\/12\/escalate$/);
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({
-      reason: 'Customer is losing money',
-      escalatedBy: 'Alex',
-    });
+    // Who is escalating is never in the body: the server takes it from the token.
+    expect(JSON.parse(String(init?.body))).toEqual({ reason: 'Customer is losing money' });
   });
 
   it('reads the escalation history of a ticket', async () => {

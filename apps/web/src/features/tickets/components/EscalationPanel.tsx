@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { ApiError, toErrorMessage } from '../../../api/client';
 import { ticketsApi } from '../../../api/tickets';
 import { Field } from '../../../components/Field';
+import { useSession } from '../../../auth/useSession';
 import type { EscalationResult, TicketDetail } from '../../../types/api';
 import {
-  ESCALATED_BY_MAX_LENGTH,
   REASON_MAX_LENGTH,
   REASON_MIN_LENGTH,
   escalationBlockedReason,
@@ -24,8 +24,8 @@ interface EscalationPanelProps {
  * the ticket changed since the page loaded).
  */
 export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
+  const session = useSession();
   const [reason, setReason] = useState('');
-  const [escalatedBy, setEscalatedBy] = useState('');
   const [errors, setErrors] = useState<EscalationErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [serverError, setServerError] = useState<string>();
@@ -36,7 +36,7 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
     event.preventDefault();
     setServerError(undefined);
 
-    const validationErrors = validateEscalation({ reason, escalatedBy });
+    const validationErrors = validateEscalation(reason);
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
@@ -48,7 +48,6 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
     try {
       const result = await ticketsApi.escalateTicket(ticket.id, {
         reason: reason.trim(),
-        escalatedBy: escalatedBy.trim(),
       });
 
       setReason('');
@@ -98,18 +97,9 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
         )}
       </Field>
 
-      <Field id="escalate-by" label="Escalated by" error={errors.escalatedBy}>
-        {(fieldProps) => (
-          <input
-            {...fieldProps}
-            type="text"
-            value={escalatedBy}
-            maxLength={ESCALATED_BY_MAX_LENGTH}
-            disabled={isSaving}
-            onChange={(event) => setEscalatedBy(event.target.value)}
-          />
-        )}
-      </Field>
+      {session && (
+        <p className="field__hint">Recorded as {session.user.fullName}.</p>
+      )}
 
       {serverError && (
         <p className="field__error" role="alert">
@@ -135,10 +125,6 @@ function fromApiErrors(fieldErrors: Record<string, string[]>): EscalationErrors 
 
     if (key === 'reason') {
       errors.reason = messages[0];
-    }
-
-    if (key === 'escalatedBy') {
-      errors.escalatedBy = messages[0];
     }
   }
 

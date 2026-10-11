@@ -498,3 +498,21 @@ textarea[aria-invalid='true'] {
   align-items: flex-start;
   gap: 2px;
 }
+
+.app__user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.login {
+  max-width: 380px;
+  margin: 64px auto;
+  padding: 0 16px;
+}
+
+.login h1 {
+  margin-bottom: 16px;
+}

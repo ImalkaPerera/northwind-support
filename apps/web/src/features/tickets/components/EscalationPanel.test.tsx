@@ -14,15 +14,11 @@ vi.mock('../../../api/tickets', () => ({
 
 const escalateTicket = vi.mocked(ticketsApi.escalateTicket);
 
-async function fill(reason: string, escalatedBy: string) {
+async function fill(reason: string) {
   const user = userEvent.setup();
 
   if (reason) {
     await user.type(screen.getByLabelText('Reason'), reason);
-  }
-
-  if (escalatedBy) {
-    await user.type(screen.getByLabelText('Escalated by'), escalatedBy);
   }
 
   await user.click(screen.getByRole('button', { name: 'Escalate ticket' }));
@@ -37,7 +33,7 @@ describe('EscalationPanel', () => {
     const onEscalated = vi.fn();
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} />);
 
-    await fill('abc', 'Alex Turner');
+    await fill('abc');
 
     expect(screen.getByText(/at least 5 characters/i)).toBeInTheDocument();
     expect(escalateTicket).not.toHaveBeenCalled();
@@ -47,17 +43,8 @@ describe('EscalationPanel', () => {
   it('treats a reason that is only spaces as too short', async () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
 
-    await fill('        ', 'Alex Turner');
+    await fill('        ');
 
-    expect(escalateTicket).not.toHaveBeenCalled();
-  });
-
-  it('asks who is escalating and does not call the API without it', async () => {
-    render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
-
-    await fill('Customer is losing money', '');
-
-    expect(screen.getByText('Say who is escalating this ticket.')).toBeInTheDocument();
     expect(escalateTicket).not.toHaveBeenCalled();
   });
 
@@ -68,12 +55,10 @@ describe('EscalationPanel', () => {
 
     render(<EscalationPanel ticket={ticketDetail({ id: 12 })} onEscalated={onEscalated} />);
 
-    await fill('  Customer is losing money  ', '  Alex Turner  ');
+    await fill('  Customer is losing money  ');
 
-    expect(escalateTicket).toHaveBeenCalledWith(12, {
-      reason: 'Customer is losing money',
-      escalatedBy: 'Alex Turner',
-    });
+    // Only the reason is sent: who is escalating comes from the signed-in agent's token.
+    expect(escalateTicket).toHaveBeenCalledWith(12, { reason: 'Customer is losing money' });
     expect(onEscalated).toHaveBeenCalledWith(result);
   });
 
@@ -85,7 +70,7 @@ describe('EscalationPanel', () => {
 
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} />);
 
-    await fill('Customer is losing money', 'Alex Turner');
+    await fill('Customer is losing money');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ticket TCK-0012 is already Critical and cannot be escalated further.',
@@ -102,7 +87,7 @@ describe('EscalationPanel', () => {
 
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
 
-    await fill('Customer is losing money', 'Alex Turner');
+    await fill('Customer is losing money');
 
     expect(await screen.findByText('The reason must be at least 5 characters.')).toBeInTheDocument();
   });
@@ -112,7 +97,7 @@ describe('EscalationPanel', () => {
 
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
 
-    await fill('Customer is losing money', 'Alex Turner');
+    await fill('Customer is losing money');
 
     const button = await screen.findByRole('button', { name: 'Escalating...' });
     expect(button).toBeDisabled();

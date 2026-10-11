@@ -117,9 +117,22 @@ export interface RaisedTicket extends TicketDetail {
   triage: TicketTriage;
 }
 
+/** Who is escalating is not sent: the API takes it from the signed-in agent's token. */
 export interface EscalateTicketPayload {
   reason: string;
-  escalatedBy: string;
+}
+
+/** The signed-in agent, as the login response and /auth/me describe them. */
+export interface CurrentUser {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expiresAtUtc: string;
+  user: CurrentUser;
 }
 
 /** One entry of a ticket's escalation history. */

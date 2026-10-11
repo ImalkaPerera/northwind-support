@@ -1,3 +1,4 @@
+import { clearSession, getSession } from '../auth/sessionStore';
 import type { ProblemDetails } from '../types/api';
 
 /**
@@ -30,13 +31,23 @@ export class ApiError extends Error {
  * {@link ApiError} that callers can show to the user.
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const session = getSession();
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      // Every call carries the token, so no page has to remember to.
+      ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
+
+  // A 401 on a call that sent a token means it is expired or no longer accepted. Dropping the
+  // session sends every screen back to the login page, wherever the call came from.
+  if (response.status === 401 && session) {
+    clearSession();
+  }
 
   if (!response.ok) {
     const problem = await readProblem(response);

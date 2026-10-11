@@ -105,9 +105,9 @@ something I saw.
 - `docker compose up --build`: SQL Server became healthy first, then the API started.
 - `GET /health` with no token gave `200 Healthy`. `GET /api/tickets` with no token gave `401`, and
   after signing in it returned the ticket list.
-- Empty volume: I started a second copy of the stack (its own project name, its own volume, port
-  5081) so my own data wasn't wiped. It came up healthy and returned 40 seeded tickets, and I
-  removed it afterwards.
+- Empty volume: I ran `docker compose down -v && docker compose up --build`. SQL Server became
+  healthy, the API migrated and seeded, `/health` returned `200 Healthy`, and `/api/tickets` with a
+  token returned `totalCount` 40.
 - Restore is cached: I changed one `.cs` file and rebuilt. The `COPY` of the project files and
   `dotnet restore` were `CACHED`; only the `COPY` of the source and `dotnet publish` ran again.
 - Non-root: `docker compose exec api whoami` printed `app` (picture below).

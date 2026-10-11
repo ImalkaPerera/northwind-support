@@ -70,7 +70,8 @@ Details: `docs/authentication.md`.
 I started from what the container needs to be safe and repeatable: a multi-stage build (the SDK
 only to build, the smaller runtime image to run), a non-root user, and no secrets in the image.
 The database password and the signing key arrive as environment variables when the container
-starts.
+starts. After a review I also kept `appsettings.Development.json` out of the image and published
+the API on 127.0.0.1 only.
 
 `docker compose up` starts SQL Server first, and the API waits until the database is healthy,
 then migrates and seeds. I added a `/health` endpoint so Docker and a person can both see that

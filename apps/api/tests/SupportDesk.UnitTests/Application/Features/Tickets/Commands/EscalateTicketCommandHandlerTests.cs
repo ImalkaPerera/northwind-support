@@ -12,7 +12,7 @@ public class EscalateTicketCommandHandlerTests
 {
     private const string Reason = "Customer is losing money every hour";
 
-    private static EscalateTicketRequest Request() => new(Reason, "Alex Turner");
+    private static EscalateTicketRequest Request() => new(Reason);
 
     private static AgentDto Agent(int id, string name, int open, int max = 10, bool active = true) =>
         new(id, name, $"{name}@example.com", active, max, open, []);
@@ -44,6 +44,32 @@ public class EscalateTicketCommandHandlerTests
         Assert.Equal(context.Clock.UtcNow.AddHours(4), ticket.DueAtUtc);
         Assert.Equal(TicketPriority.Critical, result.Escalation.ToPriority);
         Assert.Equal(TicketPriority.High, result.Escalation.FromPriority);
+    }
+
+    [Fact]
+    public async Task RecordsTheSignedInAgentAsWhoEscalated()
+    {
+        var context = new TicketCommandTestContext { AgentList = [Agent(1, "Alex", open: 3)] };
+        context.CurrentUser.SetupGet(u => u.FullName).Returns("Sara Lindqvist");
+        var ticket = context.ExistingTicket(OpenTicket());
+
+        var result = await context.EscalateTicket.HandleAsync(ticket.Id, Request(), CancellationToken.None);
+
+        Assert.Equal("Sara Lindqvist", context.AddedEscalation!.EscalatedBy);
+        Assert.Equal("Sara Lindqvist", result.Escalation.EscalatedBy);
+    }
+
+    [Fact]
+    public async Task WithNoSignedInAgent_IsUnauthorizedAndNothingIsSaved()
+    {
+        var context = new TicketCommandTestContext();
+        context.CurrentUser.SetupGet(u => u.FullName).Returns((string?)null);
+        var ticket = context.ExistingTicket(OpenTicket());
+
+        await Assert.ThrowsAsync<UnauthorizedException>(
+            () => context.EscalateTicket.HandleAsync(ticket.Id, Request(), CancellationToken.None));
+
+        context.VerifySaved(Times.Never());
     }
 
     [Fact]

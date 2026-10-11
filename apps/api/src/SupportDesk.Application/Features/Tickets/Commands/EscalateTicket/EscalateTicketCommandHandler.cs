@@ -20,9 +20,11 @@ public sealed class EscalateTicketCommandHandler(
     TicketTriage triage,
     IUnitOfWork unitOfWork,
     IClock clock,
+    ICurrentUser currentUser,
     GetTicketQueryHandler getTicket,
     ILogger<EscalateTicketCommandHandler> logger)
 {
+    /// <exception cref="UnauthorizedException">There is no signed-in agent.</exception>
     /// <exception cref="NotFoundException">The ticket does not exist.</exception>
     /// <exception cref="SupportDesk.Domain.Exceptions.BusinessRuleViolationException">
     /// The ticket is Resolved, Closed or already Critical.
@@ -32,6 +34,9 @@ public sealed class EscalateTicketCommandHandler(
         EscalateTicketRequest request,
         CancellationToken ct)
     {
+        // Who is escalating comes from the token, never from the request.
+        var escalatedBy = currentUser.FullName ?? throw new UnauthorizedException("You are not signed in.");
+
         var ticket = await tickets.GetByIdAsync(id, ct) ?? throw new NotFoundException("Ticket", id);
 
         // Rejected before anything else is looked up.
@@ -51,7 +56,7 @@ public sealed class EscalateTicketCommandHandler(
             new EscalationTriageInput(ticket, category.Name, category.RequiresSpecialist, customer.Tier, now),
             allAgents.Select(a => a.ToCandidate()));
 
-        var entry = ticket.Escalate(request.Reason, request.EscalatedBy, decision.DueAtUtc, decision.Agent?.Id, now);
+        var entry = ticket.Escalate(request.Reason, escalatedBy, decision.DueAtUtc, decision.Agent?.Id, now);
 
         await tickets.AddEscalationAsync(entry, ct);
         await unitOfWork.SaveChangesAsync(ct);

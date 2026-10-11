@@ -61,9 +61,13 @@ internal sealed class TicketCommandTestContext
             Tickets.Object, Customers.Object, Categories.Object, AgentQueries.Object, triage,
             UnitOfWork.Object, Clock, getTicket, NullLogger<RaiseTicketCommandHandler>.Instance);
 
+        CurrentUser.SetupGet(u => u.AgentId).Returns(1);
+        CurrentUser.SetupGet(u => u.FullName).Returns("Alex Turner");
+
         EscalateTicket = new EscalateTicketCommandHandler(
             Tickets.Object, Customers.Object, Categories.Object, AgentQueries.Object, triage,
-            UnitOfWork.Object, Clock, getTicket, NullLogger<EscalateTicketCommandHandler>.Instance);
+            UnitOfWork.Object, Clock, CurrentUser.Object, getTicket,
+            NullLogger<EscalateTicketCommandHandler>.Instance);
 
         ChangeTicketStatus = new ChangeTicketStatusCommandHandler(Tickets.Object, UnitOfWork.Object, Clock, getTicket);
 
@@ -85,6 +89,9 @@ internal sealed class TicketCommandTestContext
     public Mock<ITicketQueries> TicketQueries { get; } = new();
 
     public Mock<IAgentQueries> AgentQueries { get; } = new();
+
+    /// <summary>The signed-in agent: Alex Turner, unless a test changes it.</summary>
+    public Mock<ICurrentUser> CurrentUser { get; } = new();
 
     /// <summary>The agents the triage rules can choose from.</summary>
     public IReadOnlyList<AgentDto> AgentList { get; set; } = [];

@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SupportDbContext>());
 
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
 
         // Read once at startup, so a missing or invalid Sla section fails fast.
         services.AddSingleton(SlaPolicyFactory.FromConfiguration(configuration));

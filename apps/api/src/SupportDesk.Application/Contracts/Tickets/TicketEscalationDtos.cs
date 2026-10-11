@@ -17,8 +17,11 @@ public sealed class RaisedTicketDto : TicketDetailDto
     public TicketTriageDto Triage { get; }
 }
 
-/// <summary>Body of POST /api/tickets/{id}/escalate.</summary>
-public sealed record EscalateTicketRequest(string Reason, string EscalatedBy);
+/// <summary>
+/// Body of POST /api/tickets/{id}/escalate. Who is escalating is never sent: it is the agent the
+/// token belongs to.
+/// </summary>
+public sealed record EscalateTicketRequest(string Reason);
 
 /// <summary>One entry of a ticket's escalation history.</summary>
 public sealed record TicketEscalationDto(

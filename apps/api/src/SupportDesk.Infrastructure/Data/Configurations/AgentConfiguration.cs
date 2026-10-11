@@ -19,6 +19,9 @@ public sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
 
         builder.Property(a => a.CreatedAtUtc).HasColumnType("datetime2(3)");
 
+        // Null until the agent has a password. An Identity hash is about 100 characters.
+        builder.Property(a => a.PasswordHash).HasMaxLength(256);
+
         builder.HasIndex(a => a.Email).IsUnique().HasDatabaseName("UQ_Agents_Email");
 
         builder.HasMany(a => a.Specializations)

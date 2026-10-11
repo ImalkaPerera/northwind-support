@@ -1,278 +1,236 @@
 # Northwind Support Desk
 
-A support ticket management system: raise tickets, search and filter them, assign them to agents,
-and move them through their lifecycle.
-
+A support ticket system: raise tickets, filter them, assign them to agents and escalate them.
 **.NET 10 Web API** + **React 19 / TypeScript** + **SQL Server**, in one monorepo.
 
----
+## What I built
 
-## The assignment
-
-You are joining a team that already has this app working. Complete the tasks **in order**.
-Full requirements are in **[`ASSIGNMENT_CANDIDATE.md`](ASSIGNMENT_CANDIDATE.md)**.
-
-| # | Task | Done looks like | Effort |
+| # | Task | In this README | Write-up |
 | --- | --- | --- | --- |
-| 1 | **Fix a defect, add server-side filtering** | Root cause fixed with a regression test; every list filter applied in the database with a correct count | ~2.5 h |
-| 2 | **Ticket escalation & assignment** | Automatic triage on create, escalation with history, SLA status, UI for all of it | ~7 h |
-| 3 | **Login and authentication** | Agents sign in; API rejects unauthenticated calls; login UI | ~4 h |
-| 4 | **Dockerise the API** | `docker compose up` gives a migrated, seeded API with no baked-in secret | ~1.5 h |
+| 1 | Fix DEFECT-117, filter in the database | [DEFECT-117](#the-defect-defect-117) · [Filtering](#filtering) | [defect](docs/defect-117.md), [filtering](docs/filtering.md) |
+| 2 | Triage, escalation, SLA status | [Task 2 rules](#the-task-2-rules-as-i-understood-them) | [escalation](docs/escalation.md) |
+| 3 | Agent sign-in with JWT | [Authentication](#authentication) | [authentication](docs/authentication.md) |
+| 4 | Dockerise the API | [Docker](#docker) | [docker](docs/docker.md) |
 
-### Guidance
+All four tasks are done.
 
-- **Time: 2 days.** Honestly marking a task "not finished" beats rushing all of them.
-- **Fork** this repo to your own GitHub account and work there. **Do not push to the original.**
-- **AI tools are allowed.** You must understand and be able to defend every line you submit.
-- **Commit as you go** and keep the real history. Commit the Task 1 defect fix and the filtering
-  separately from each other and from the feature work. A single squashed commit is not accepted.
-- **Where the spec is ambiguous**, make a decision, write it down in the README, and move on.
-- **Out of scope:** registration, password reset, roles, OAuth/SSO, refresh tokens, MFA,
-  notifications, CI, caching, visual redesign. Mention them under *Known limitations* instead.
+The assignment is [`ASSIGNMENT_CANDIDATE.md`](ASSIGNMENT_CANDIDATE.md), my approach is
+[`APPROACH.md`](APPROACH.md).
 
-### Submission
+### The Task 2 rules as I understood them
 
-1. Update this **README** with what you built, your design decisions (chosen, rejected and why),
-   the defect's root cause, dev login credentials, how to run and test it, AI usage, and known
-   limitations. A reviewer must be able to run it without asking you anything.
-2. Add an **APPROACH.md** explaining your approach and thought process for each task.
-3. Commit both, then send us the **link to your fork**, the **dev login credentials**, and a
-   **rough note of time spent** on what. (If the fork is private, add the reviewers as collaborators.)
+Details are in [docs/escalation.md](docs/escalation.md).
 
----
+- **Priority and due date:** the requested priority (Medium if none), always Critical for a
+  `ForcesCriticalPriority` category. Windows are 4, 8, 24 and 72 hours; Premium gets half, never
+  under 1 hour. They live in the `Sla` config section.
+- **Owner:** an active agent below their limit, specialised where needed; fewest open tickets,
+  then lowest id. Nobody fits: unassigned, with a reason.
+- **Escalation and status:** one level up with a reason, due date restarted, history written;
+  Critical, Resolved and Closed are refused. SLA status is derived, never stored.
 
 ## Quick start
 
-**Prerequisites:** .NET SDK 10 (`global.json`), Node.js 22 (`.nvmrc`; 20.19+ works), Docker.
+**Prerequisites:** .NET SDK 10, Node.js 22 (20.19+ works), Docker Desktop running.
 
 ```bash
-cp .env.example .env          # optional, every value has a working default
-npm install                   # installs the web app
-npm run db:up                 # SQL Server 2022 in Docker on localhost:1433
-npm run api                   # terminal 1: migrates, seeds, then serves the API
-npm run web                   # terminal 2: React dev server
+npm install
+docker compose up --build        # SQL Server and the API, API on http://localhost:5080
+VITE_API_PROXY_TARGET=http://localhost:5080 npm run web    # web app on http://localhost:5173
 ```
 
-| What | Where |
-| --- | --- |
-| Web app | http://localhost:5173 |
-| API | https://localhost:7043 (also http://localhost:5043) |
-| Swagger | https://localhost:7043/swagger |
+PowerShell:
 
-In Development the API applies migrations and seeds demo data on startup. **Never commit real
-credentials.**
+```powershell
+$env:VITE_API_PROXY_TARGET="http://localhost:5080"; npm run web
+```
 
-**Visual Studio 2026:** run `npm run db:up`, open `SupportDesk.sln`, set
-**SupportDesk.Presentation** as the startup project, and press F5 on the **https** profile.
-
-## Tests
+Or run the API on your machine, with only the database in Docker:
 
 ```bash
-npm test                      # dotnet test, then the web tests (Vitest)
+npm install
+npm run db:up                    # SQL Server on localhost:1433
+npm run api                      # terminal 1: migrates, seeds, API on https://localhost:7043
+npm run web                      # terminal 2: web app on http://localhost:5173
 ```
 
-Both pass on a clean checkout and neither needs a database.
-
-## Commands
-
-| Command | What it does |
-| --- | --- |
-| `npm run db:up` / `db:down` / `db:reset` | Start / stop / wipe SQL Server |
-| `npm run api` / `npm run web` | Run the API / the React app |
-| `npm run build` | Build both |
-| `npm run lint` / `typecheck` / `format` | Web lint and types / `dotnet format` |
-| `npm run ef -- migrations add <Name>` | Add an EF Core migration |
-
-## API at a glance
-
-| Endpoint | Description |
-| --- | --- |
-| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `slaStatus`, `sortBy`, `sortDirection`. Filters are applied in the database. |
-| `GET /api/tickets/{id}` | One ticket |
-| `POST /api/tickets` | Create a ticket. It is triaged: priority, due date and owner are chosen, and a `triage` object says why. `201` even when no agent is eligible |
-| `PATCH /api/tickets/{id}/status` · `/assignment` | Change status / assignee |
-| `POST /api/tickets/{id}/escalate` | Raise the priority one level with a `reason` and `escalatedBy`. `400` bad input, `404` unknown ticket, `409` Critical, Resolved or Closed |
-| `GET /api/tickets/{id}/escalations` | The escalation history, newest first |
-| `GET /api/customers` · `/api/agents` · `/api/categories` | Reference data |
-
-Errors are `ProblemDetails`: `400` validation, `404` not found, `409` conflict or business rule.
-
-**Seed data:** 5 categories, 6 customers (3 Premium), 6 agents (one inactive, one at their limit)
-and 40 tickets across every status, priority and SLA state.
-
-## Troubleshooting
-
-| Symptom | Fix |
-| --- | --- |
-| API cannot reach the database | `npm run db:up`, wait ~20 s, check `docker compose ps` |
-| Port 1433 already in use | Change the port in `docker-compose.yml` and `.env` |
-| Browser warns about the certificate | `dotnet dev-certs https --trust`, or use the web app, which proxies |
-| Web app shows "Unable to load tickets" | The API is not running, or `VITE_API_PROXY_TARGET` points at the wrong port |
-| SQL Server slow on Apple Silicon | Enable Rosetta in Docker Desktop → Settings → General |
-
-## The defect (DEFECT-117)
-
-**Root cause:** the `useTicketList` effect only depended on `search`, `page` and `pageSize`.
-Changing a filter such as status or priority updated the state but never triggered a new API
-request.
-
-**Fix:** I restructured the hook so every filter change sends a request straight away. Only the
-search text is debounced (300 ms), so typing doesn't send a request per keystroke. I also removed
-the lint suppression that was hiding the missing-dependency warning.
-
-**Testing:** the DEFECT-117 tests assert the request that is sent after each filter change; 7 of
-them fail on the original code and pass with the fix. Debounce and reset are tested too.
-
-**Check it by hand:** change Status in the web app and watch a `GET /api/tickets?status=...`
-request appear immediately in the Network tab.
-
-See [docs/defect-117.md](docs/defect-117.md) for the investigation and screenshots.
-
-## Filtering
-
-**Where:** `TicketQueries.ApplyFilters` (Infrastructure). Each filter that is sent adds one
-`Where` before the count and paging, so the database does all the work and `totalCount` and the
-pager match the filtered list.
-
-**Rules:**
-
-- `status`, `priority`, `categoryId`, `customerId` and `assignedAgentId` are exact matches.
-- `unassignedOnly=true` keeps only tickets with no agent.
-- `search` is trimmed, and ignored if blank. It matches the title, the reference or the
-  customer name.
-- All filters must match (AND).
-
-**Testing:** the tests in `TicketQueriesFilterTests` run the query against an in-memory SQLite
-database, so the filters really become SQL. With the original query put back, 12 of the 14 fail.
-
-**Adding a filter:** add the field to `TicketQuery` and one more `if` in `ApplyFilters`.
-
-See [docs/filtering.md](docs/filtering.md) for the before/after and the tests.
-
-## Ticket escalation (Task 2)
-
-**What it does:** a new ticket is triaged on create: its priority, due date and owner come from
-the rules, and the response says why. A ticket can be escalated one level with a reason, and
-each escalation is kept in a history. SLA status is derived, never stored, and filterable.
-
-**Where:** small domain classes (`SlaPolicy`, `PriorityResolver`, `AgentSelector`,
-`Ticket.Escalate`) that `TicketTriage` combines, so create and escalate share them. The windows
-and thresholds are in the `Sla` section of `appsettings.json`.
-
-**Testing:** boundary tests with a fixed clock, mocked handlers, SQLite for the history and the
-SLA filter, and Vitest for the screens. The filter was also checked on the real SQL Server.
-
-**Check it by hand:** raise a Security ticket for a Premium customer: it comes back Critical,
-with an agent and a due date two hours away. Escalate any ticket below Critical and the history
-appears under it.
-
-**Who escalated:** it comes from the signed-in agent's token, not from the request or the form.
-
-See [docs/escalation.md](docs/escalation.md) for the rules, examples and screenshots.
-
-## Authentication (Task 3)
-
-**What it does:** agents sign in with email and password and get a signed token. Every endpoint
-except `POST /api/auth/login` and Swagger needs it, enforced by one fallback authorization policy.
-Passwords are stored as salted hashes (ASP.NET Identity `PasswordHasher`), and a wrong email, a
-wrong password and an inactive agent all give the same 401. `escalatedBy` comes from the token.
-
-**Token:** it lasts **60 minutes** (`Jwt:LifetimeMinutes`), and the signing key comes from
-configuration (`Jwt__SigningKey`, see `.env.example`). The web app keeps it in **sessionStorage**:
-it is cleared when the tab closes and isn't shared between tabs, but any script on the page can
-read it, so an XSS bug would expose it.
-
-See [docs/authentication.md](docs/authentication.md) for the decisions and screenshots.
+`.env` is optional; every value has a local default. Other commands, the API list and
+troubleshooting are in [docs/running.md](docs/running.md).
 
 ## Development login
 
-Local development only. Every seeded agent has the same password, hashed when the data is seeded:
+Local use only. Every seeded agent has the same password, hashed when the data is seeded.
 
 - Email: `alex.turner@northwind-support.example`
 - Password: `LocalDev-Password-1`
 
-Other agents use the same password with their own email, for example
-`sara.lindqvist@northwind-support.example`. Yuki Tanaka is inactive and cannot sign in.
+Other agents use their own email with the same password. Yuki Tanaka is inactive and can't sign in.
 
 ## Design decisions
 
 **The defect**
 
-- **Chosen:** keep the filters that requests are made with separate from the text in the search
-  box. Dropdowns apply straight away; the search text is applied 300 ms after typing stops.
-- **Rejected:** adding every filter to the existing dependency array. The debounce wraps the
-  whole effect, so dropdowns would wait 300 ms too, and the task asks for an immediate request.
-- **Rejected:** a remount key or a forced reload. The task says that hides the problem instead of
-  fixing the cause.
+- **Chosen:** keep the filters that requests use separate from the search box text. Dropdowns
+  apply at once; the search text applies 300 ms after typing stops.
+- **Rejected:** adding every filter to the existing dependency array, because the debounce wraps
+  the whole effect and dropdowns would wait too. Also rejected: a remount key or forced reload,
+  which hides the cause.
 
 **Filtering**
 
-- **Chosen:** one `ApplyFilters` method with a `Where` per filter that was sent, so the next
-  filter is one more `if`.
-- **Rejected:** filtering in C# after loading. It breaks the count and paging, and the task
-  forbids it.
-- **Rejected:** a specification class or a dynamic-LINQ library, which is more than seven filters
-  need.
-- **Chosen:** tests against in-memory SQLite, because mocks and EF's in-memory provider don't
-  prove that the filters become real SQL.
+- **Chosen:** one `ApplyFilters` with a `Where` per filter sent, so a new filter is one more `if`.
+  **Rejected:** filtering in C#, which breaks the count and paging, and a specification class,
+  which is more than seven filters need.
+- **Chosen:** tests on in-memory SQLite, because mocks don't prove the filters become real SQL.
 
 **Escalation and triage**
 
-- **Chosen:** the rules sit in small domain classes (`SlaPolicy`, `PriorityResolver`,
-  `AgentSelector`, `Ticket.Escalate`) that create and escalate both use through `TicketTriage`.
-  **Rejected:** writing them in the handlers, because they would be written twice.
-- **Chosen:** the at-risk window comes from the config for the ticket's priority and customer
-  tier. **Rejected:** due date minus created date, which is wrong after an escalation, and a
-  stored window column, which needs a migration and a seeder change for something the config
-  already answers.
+- **Chosen:** rules in small domain classes (`SlaPolicy`, `PriorityResolver`, `AgentSelector`,
+  `Ticket.Escalate`) shared through `TicketTriage`. **Rejected:** writing them in the handlers,
+  where create and escalate would each have a copy.
+- **Chosen:** the at-risk window comes from config, by priority and tier. **Rejected:** due date
+  minus created date, which is wrong after an escalation, and a stored column, which needs a
+  migration for something the config already answers.
 - **Chosen:** history foreign keys use `Restrict`. **Rejected:** cascade, because an audit trail
-  shouldn't disappear by accident.
-- **Chosen:** the ticket being escalated is not counted against its own agent's limit.
+  shouldn't vanish by accident.
+- **Chosen:** the ticket being escalated isn't counted against its own agent's limit.
   **Rejected:** counting it, because an agent at their limit would lose every ticket they hold.
-- **Chosen:** equal agents are separated by the lowest id. **Rejected:** random or alphabetical,
-  which are not repeatable or favour the same person.
-- **Chosen:** the SLA filter compares dates with values worked out in C#. **Rejected:** date
-  arithmetic in SQL, which differs between SQL Server and SQLite, and filtering in memory.
+- **Chosen:** ties go to the lowest id. **Rejected:** random, which isn't repeatable.
+- **Chosen:** the SLA filter compares dates with spans worked out in C#. **Rejected:** date
+  arithmetic in SQL, which differs between SQL Server and SQLite.
+
+**Authentication**
+
+- **Chosen:** a nullable `PasswordHash` column on `Agent`. **Rejected:** a `Users` table; every
+  user is an agent and there are no roles, so it only adds a join.
+- **Chosen:** 60 minute tokens. **Rejected:** longer, because there are no refresh tokens, so a
+  shorter life limits a stolen one.
+- **Chosen:** `sessionStorage`. **Rejected:** `localStorage`, which keeps the token after the
+  browser closes.
+- **Chosen:** one fallback authorization policy, `[AllowAnonymous]` only on login. **Rejected:**
+  `[Authorize]` per controller, where a new endpoint could be left open.
 
 **Patterns I used**
 
-- **Factory:** `SlaPolicyFactory` builds the policy once from configuration and fails at startup
-  if a value is missing.
-- **Domain service:** `AgentSelector` and `TicketTriage` hold rules that involve several
-  aggregates and don't belong on one entity.
-- **Composable filter steps:** `ApplyFilters` and `SlaStatusFilter` add one condition at a time,
-  so a new filter is one more step.
+- **Factory:** `SlaPolicyFactory` builds the policy from config once and fails at startup if a
+  value is missing, so a bad config never reaches a request.
+- **Domain service:** `AgentSelector` and `TicketTriage` hold rules that span several objects and
+  don't belong on one entity; create and escalate both use them.
+- **Composable filter steps:** `ApplyFilters` and `SlaStatusFilter` add one condition each, so a
+  new filter is one more step, not a rewrite.
+
+## The tasks
+
+### The defect (DEFECT-117)
+
+**Root cause:** the `useTicketList` effect only depended on `search`, `page` and `pageSize`, so
+changing status or priority updated the state but never sent a request.
+
+**Fix:** every filter change sends a request at once; only the search text is debounced. I also
+removed the lint suppression that hid the missing dependency.
+
+**Verify:** change Status and a `GET /api/tickets?status=...` appears in the Network tab. The
+regression tests assert the request and fail on the original code.
+
+### Filtering
+
+**Where:** `TicketQueries.ApplyFilters`. Each filter sent adds one `Where` before the count and
+paging, so `totalCount` and the pager match the filtered list.
+
+**Checked:** `TicketQueriesFilterTests` run on SQLite, so the filters become SQL, and fail on the
+original query. The SLA filter was also run on the real SQL Server.
+
+**Next filter:** add the field to `TicketQuery` and one more `if` in `ApplyFilters`.
+
+### Authentication
+
+**Credentials:** `PasswordHash` on `Agent`, salted and hashed with ASP.NET Identity's
+`PasswordHasher` (PBKDF2). I wrote no hashing myself.
+
+**Token:** `POST /api/auth/login` returns a signed JWT, its expiry and the agent's name. A wrong
+email, a wrong password and an inactive agent give the same 401. It lasts 60 minutes, and the key
+comes from `Jwt__SigningKey`, never from code. `escalatedBy` comes from the token.
+
+**Storage:** the web app keeps it in `sessionStorage` and sends it from `client.ts`. Any script on
+the page can read it, so an XSS bug would expose it.
+
+**For production:** an httpOnly cookie with short tokens, refresh tokens and revocation, a key from
+a secret store, and lockout or rate limiting.
+
+### Docker
+
+**Image:** multi-stage `apps/api/Dockerfile`, built from the repo root. The SDK image builds; the
+ASP.NET image runs it as the non-root `app` user on HTTP port 8080. Project files are restored
+before the source is copied, so a code change reuses the restore layer. The API image is 455 MB;
+the SDK image is 1.3 GB.
+
+**Environment:** nothing is baked in. Compose passes `ConnectionStrings__Default`,
+`Jwt__SigningKey` (from `JWT_SIGNING_KEY`) and `ASPNETCORE_ENVIRONMENT`; see `.env.example`.
+
+**Migrations:** here the API migrates and seeds itself in `Development`. In a real deployment
+migrations would be a separate release step, such as an EF Core migration bundle, so instances
+don't migrate at once and the app's database user doesn't need schema rights.
+
+**Checked:** a fresh stack on an empty volume (a second project, not the literal `down -v` on my
+main one), the cached restore layer, `whoami` as `app`, and the web app in a browser. See
+[docs/docker.md](docs/docker.md).
+
+## Across all tasks
+
+### Database
+
+**Added:** the `TicketEscalations` table (`AddTicketEscalations`) and a nullable `PasswordHash`
+column on `Agent` (`AddAgentPasswordHash`).
+
+**Index:** `(TicketId, EscalatedAtUtc DESC)` serves "one ticket's history, newest first"; the two
+agent indexes EF added back the foreign key checks.
+
+### Testing
+
+```bash
+npm test         # dotnet test, then the web tests (Vitest). No database or Docker needed
+```
+
+**Tested:** 207 backend tests (203 unit, 4 architecture) and 64 web tests: SLA boundaries with a
+fixed clock, agent choice, escalation, filters on SQLite, login and hashing, real HTTP calls
+through the app (401 without a token, 200 with), and the web screens and sign-in guard.
+
+**Not tested, on purpose:** SQL Server itself (SQLite stands in; I checked the SLA filter there by
+hand), two tickets raised at once, the Docker build, the 503 from `/health`, and a browser end to
+end run.
 
 ## AI usage
 
-I used Claude Code as a pair programmer to understand the codebase, explore solutions, and draft code, tests, and documentation. I worked in small steps, reviewed proposed changes, and verified behaviour before committing.
+**Tools and purpose.** Claude Code, as a pair programmer: to get up to speed on the existing .NET
+code, draft code and tests, and help word the docs. The decisions and the checking were mine.
 
-- **Accepted:** The `ApplyFilters` design and the small rule classes behind `TicketTriage`.
-- **Changed:** I kept the `FromAgentId` and `ToAgentId` indexes after reviewing their role in foreign-key checks.
-- **Bugs:** An early login implementation used a static hash field, causing order-dependent tests. I removed the shared state after tests exposed the issue. AI also helped identify an ESLint suppression hiding a warning related to DEFECT-117.
-- **Verification:** I ran 201 backend tests and 64 web tests, added regression tests, checked the SLA filter against SQL Server, and manually tested the main flows. Screenshots are in `docs/`.
+**A workflow that worked.** Small steps. For each one I asked for a plain-English explanation of
+the change, ran the tests, tried it in the browser or Postman, and only then committed it.
+
+**Accepted as-is.** The `ApplyFilters` design (one `Where` per filter, before the count) and the
+small rule classes behind `TicketTriage`.
+
+**Changed or rejected.** It called the `FromAgentId` and `ToAgentId` indexes unused. I kept them,
+because they make the `Restrict` foreign key checks fast when an agent changes.
+
+**Bugs.** It introduced one: the first login handler kept a hash in a static field, so tests
+passed or failed depending on their order. Running the full test class exposed it, and it was
+removed. It also helped me find one: the `eslint-disable` comment in `useTicketList` was hiding
+the warning that pointed at DEFECT-117.
+
+**How I verified it.** The backend and web tests, regression tests that fail on the original code,
+the SLA filter checked against the real SQL Server, and the main flows tried by hand (screenshots
+in `docs/`).
 
 ## Known limitations
 
-- If a slow request finishes after a newer one, it can overwrite the newer result. I left this out
-  to keep the defect fix focused on its cause.
-- Search uses `LIKE '%text%'`, which can't use an index. That's fine for this data; a large table
-  would need full-text search.
-- Search is case-insensitive on SQL Server because of its collation. The tests run on SQLite,
-  which is case-sensitive, so they use exact case.
-- The filter tests run on SQLite, not SQL Server itself. The SLA filter was also checked against
-  the real SQL Server by hand.
-- Open-ticket counts are read and then used, so two tickets raised at the same moment could both
-  go to an agent who has room for only one.
-- No refresh tokens, and no token revocation: a signed token works until it expires, even if the
-  agent is deactivated meanwhile.
-- No lockout or rate limiting on sign-in.
-- Not built, as the assignment says: registration, password reset, email verification, OAuth/SSO,
-  MFA, roles and HTTPS certificate work.
-- Changing the `Sla` section or a customer's tier changes the status of tickets that already
-  exist, because the at-risk window is worked out from them.
-- Ticket references are built from the highest ticket id + 1. SQL Server can skip about 1,000
-  identity values after a restart, so references can jump (TCK-0041, then TCK-1003). If two
-  tickets are created at the same moment they can compute the same reference, and the unique
-  index makes one of them fail. A database sequence would fix both. This existed before my
-  changes and is outside the tasks.
+- **Task 1:** a slow request can overwrite a newer result. Search uses `LIKE '%text%'`, which
+  can't use an index, and is case-insensitive on SQL Server but not on SQLite.
+- **Task 2:** two tickets raised at once could both go to an agent with room for one. Changing
+  the `Sla` section or a customer's tier changes the status of existing tickets. Ticket
+  references use the highest id + 1 and can jump or clash; that was there before my changes.
+- **Task 3:** no refresh tokens or revocation, so a deactivated agent's token works until it
+  expires. No lockout or rate limiting. All seeded agents share one development password. Not
+  built, as the task says: registration, password reset, OAuth/SSO, MFA, roles.
+- **Task 4:** the container runs as `Development`, so Swagger is on, and compose has local
+  defaults for the SQL password and signing key. The image has no `HEALTHCHECK` of its own.

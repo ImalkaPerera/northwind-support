@@ -37,15 +37,54 @@ The places where the spec left room, I decided and wrote down: how the at-risk w
 worked out, who keeps a ticket that is already at an agent's limit, how equal agents are split,
 and what happens when nobody is eligible. Each is in the README under "Design decisions".
 
-I checked the SLA filter against the real SQL Server as well as SQLite, because the two can
+The SLA filter was checked against the real SQL Server as well as SQLite, because the two can
 translate the same query differently.
 
 Details: `docs/escalation.md`.
 
+## Task 3: signing in
+
+I split it into the backend first and the screens second, so the rules were in place before any
+UI depended on them.
+
+Before writing code I settled four decisions: the password hash lives on `Agent` (every user is
+an agent and there are no roles), the token lasts 60 minutes (there are no refresh tokens, so a
+short life limits a stolen token), the browser keeps it in `sessionStorage`, and every seeded
+agent gets the same obviously-local dev password, hashed when the data is seeded.
+
+I closed the API with one fallback policy instead of putting `[Authorize]` on each controller,
+so a new endpoint is closed by default and can't be forgotten. Every login failure gives the
+same 401 and message, so nobody can tell which part was wrong. Who escalated a ticket now comes
+from the token, not from a text box, so it can't be faked.
+
+On the web side, `client.ts` adds the token to every call and handles any 401 in one place, so
+no page has to.
+
+I checked it with tests that send real HTTP requests, and by hand: wrong password, signing in,
+escalating as the signed-in agent, and a 401 in Postman without a token.
+
+Details: `docs/authentication.md`.
+
+## Task 4: Docker
+
+I started from what the container needs to be safe and repeatable: a multi-stage build (the SDK
+only to build, the smaller runtime image to run), a non-root user, and no secrets in the image.
+The database password and the signing key arrive as environment variables when the container
+starts.
+
+`docker compose up` starts SQL Server first, and the API waits until the database is healthy,
+then migrates and seeds. I added a `/health` endpoint so Docker and a person can both see that
+the API is up.
+
+I checked it with `docker compose ps`, the health endpoint, `whoami` inside the container (it
+prints `app`, not root), and the web app working against the container with `npm run api`
+stopped.
+
+Details: `docs/docker.md`.
+
 ## How I used AI
 
-I used Claude Code to learn this codebase's .NET conventions and to draft code and tests in
-small steps. I read each change, ran the tests, and checked the result before committing. For
-example, I noticed the domain throws an ArgumentException that the error middleware doesn't map,
-so a bad escalation reason could give a 500. I checked: the validator stops it first, and a
-2-character reason returns 400.
+I used Claude Code as a pair programmer, one small step at a time. For each step I read the change,
+ran the tests and tried it myself before committing. I didn't take everything it suggested: I kept
+two indexes it called unused, because they speed up the foreign key checks. Testing also caught a
+bug it introduced in the login handler. The details are in the README under "AI usage".
